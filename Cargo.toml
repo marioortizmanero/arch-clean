@@ -1,0 +1,10 @@
+[package]
+name = "arch-clean"
+version = "0.1.0"
+authors = ["Mario Ortiz Manero <marioortizmanero@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+crossbeam = "0.8.0"
+argh = "0.1.4"
+anyhow = "1.0.34"
