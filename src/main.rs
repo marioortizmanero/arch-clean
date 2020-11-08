@@ -13,7 +13,11 @@ use argh::FromArgs;
 pub struct Config {
     /// maximum of explicitly installed packages to be shown
     #[argh(option, default = "10")]
-    max_packages: i32,
+    max_packages: usize,
+
+    /// maximum of disk usage entries to be shown
+    #[argh(option, default = "10")]
+    max_disk_usage: usize,
 }
 
 fn main() {
@@ -24,6 +28,7 @@ fn main() {
         cmd::orphan,
         cmd::paccache,
         cmd::trash_size,
+        cmd::disk_usage,
         cmd::devel_updates,
         cmd::nvim_swap_files,
     ];

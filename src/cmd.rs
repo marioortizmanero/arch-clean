@@ -59,7 +59,7 @@ pub fn last_installed(config: &Config) -> Result<Output> {
 
             Some(format!("{} {} {}", timestamp, pkg, version))
         })
-        .take(config.max_packages as usize)
+        .take(config.max_packages)
         .collect::<Vec<_>>()
         .join("\n");
 
@@ -141,5 +141,30 @@ pub fn nvim_swap_files(_config: &Config) -> Result<Output> {
     Ok(Output {
         title: format!("NeoVim swap files (rm {}/*)", swap_dir),
         content: format!("{} files", count),
+    })
+}
+
+pub fn disk_usage(config: &Config) -> Result<Output> {
+    let mut cmd = Command::new("du")
+        .arg(get_home())
+        .arg("-cha")
+        .arg("--max-depth=1")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()?;
+    cmd.wait()?;
+    let cmd = Command::new("sort")
+        .arg("-rh")
+        .stdin(cmd.stdout.take().unwrap())
+        .output()?;
+    let out = String::from_utf8(cmd.stdout)?
+        .lines()
+        .take(config.max_disk_usage)
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    Ok(Output {
+        title: format!("Disk usage distribution in home directory"),
+        content: out
     })
 }
