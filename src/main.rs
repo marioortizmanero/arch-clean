@@ -57,19 +57,14 @@ fn main() {
         handles.push(thread::spawn(move || handle(&conf, wr, title, cmd)));
     }
 
-    // Stdout synchronized output in a different thread
-    handles.push(thread::spawn(move || loop {
-        let out = rd.recv();
-        match out {
-            Ok(out) => {
-                println!("\x1b[36m{}:\x1b[0m", out.title);
-                println!("{}", out.content);
-            }
-            Err(_) => break,
-        }
-    }));
+    // Stdout synchronized output
+    for _ in 0..handles.len() {
+        let out = rd.recv().unwrap();
+        println!("\x1b[36m{}:\x1b[0m", out.title);
+        println!("{}", out.content);
+    }
 
-    // Waiting for all of them
+    // Wait for any work left
     for handle in handles {
         handle.join().unwrap();
     }
