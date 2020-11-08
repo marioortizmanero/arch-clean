@@ -1,11 +1,11 @@
 use crate::Config;
 
-use std::process::{Command, Stdio};
-use std::io::prelude::*;
-use std::io::BufReader;
+use std::collections::HashSet;
 use std::fs;
 use std::fs::File;
-use std::collections::HashSet;
+use std::io::prelude::*;
+use std::io::BufReader;
+use std::process::{Command, Stdio};
 
 use anyhow::Result;
 
@@ -14,9 +14,7 @@ const NVIM_SWAP_DIR: &str = "~/.local/share/nvim/swap";
 
 pub fn last_installed(config: &Config) -> Result<String> {
     // First obtaining all installed packages
-    let cmd = Command::new("pacman")
-        .arg("-Qqe")
-        .output()?;
+    let cmd = Command::new("pacman").arg("-Qqe").output()?;
     let installed = String::from_utf8(cmd.stdout)?
         .lines()
         .map(ToString::to_string)
@@ -38,12 +36,12 @@ pub fn last_installed(config: &Config) -> Result<String> {
 
             // Only installations
             if action != "installed" {
-                return None
+                return None;
             }
 
             // Only still installed packages
             if !installed.contains(&pkg) {
-                return None
+                return None;
             }
 
             Some(format!("{} {} {}", timestamp, pkg, version))
@@ -52,16 +50,14 @@ pub fn last_installed(config: &Config) -> Result<String> {
         .collect::<Vec<_>>()
         .join("\n");
 
-    return Ok(out)
+    return Ok(out);
 }
 
 pub fn orphan(_config: &Config) -> Result<String> {
-    let cmd = Command::new("pacman")
-        .arg("-Qqtd")
-        .output()?;
+    let cmd = Command::new("pacman").arg("-Qqtd").output()?;
     let out = String::from_utf8(cmd.stdout)?;
 
-    return Ok(out)
+    return Ok(out);
 }
 
 pub fn paccache(_config: &Config) -> Result<String> {
@@ -72,7 +68,7 @@ pub fn paccache(_config: &Config) -> Result<String> {
         .output()?;
     let out = String::from_utf8(cmd.stdout)?;
 
-    return Ok(out)
+    return Ok(out);
 }
 
 pub fn trash_size(_config: &Config) -> Result<String> {
@@ -82,7 +78,7 @@ pub fn trash_size(_config: &Config) -> Result<String> {
         .output()?;
     let out = String::from_utf8(cmd.stdout)?;
 
-    return Ok(out)
+    return Ok(out);
 }
 
 pub fn devel_updates(_config: &Config) -> Result<String> {
@@ -97,18 +93,18 @@ pub fn devel_updates(_config: &Config) -> Result<String> {
         .lines()
         .filter_map(|line| {
             if !line.to_string().contains("devel/") {
-                return None
+                return None;
             }
             Some(line)
         })
         .collect::<Vec<_>>()
         .join("\n");
 
-    return Ok(out)
+    return Ok(out);
 }
 
 pub fn swap_files(_config: &Config) -> Result<String> {
     let count = fs::read_dir(NVIM_SWAP_DIR)?.count();
 
-    return Ok(format!("{} files", count))
+    return Ok(format!("{} files", count));
 }
