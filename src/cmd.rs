@@ -49,14 +49,14 @@ pub fn last_installed(config: &Config) -> Result<String> {
         .collect::<Vec<_>>()
         .join("\n");
 
-    return Ok(out);
+    Ok(out)
 }
 
 pub fn orphan(_config: &Config) -> Result<String> {
     let cmd = Command::new("pacman").arg("-Qqtd").output()?;
     let out = String::from_utf8(cmd.stdout)?;
 
-    return Ok(out);
+    Ok(out)
 }
 
 pub fn paccache(_config: &Config) -> Result<String> {
@@ -67,7 +67,7 @@ pub fn paccache(_config: &Config) -> Result<String> {
         .output()?;
     let out = String::from_utf8(cmd.stdout)?;
 
-    return Ok(out);
+    Ok(out)
 }
 
 pub fn trash_size(_config: &Config) -> Result<String> {
@@ -77,7 +77,7 @@ pub fn trash_size(_config: &Config) -> Result<String> {
         .output()?;
     let out = String::from_utf8(cmd.stdout)?;
 
-    return Ok(out);
+    Ok(out)
 }
 
 pub fn devel_updates(_config: &Config) -> Result<String> {
@@ -99,7 +99,7 @@ pub fn devel_updates(_config: &Config) -> Result<String> {
         .collect::<Vec<_>>()
         .join("\n");
 
-    return Ok(out);
+    Ok(out)
 }
 
 pub fn nvim_swap_files(_config: &Config) -> Result<String> {
@@ -111,5 +111,5 @@ pub fn nvim_swap_files(_config: &Config) -> Result<String> {
     let swap_dir = home + "/.local/share/nvim/swap";
     let count = fs::read_dir(swap_dir)?.count();
 
-    return Ok(format!("{} files", count));
+    Ok(format!("{} files", count))
 }
