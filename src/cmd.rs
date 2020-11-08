@@ -25,6 +25,7 @@ fn get_home() -> String {
         .unwrap()
 }
 
+/// Will only work for pacman v5.2.0+
 pub fn last_installed(config: &Config) -> Result<Output> {
     // First obtaining all installed packages
     let cmd = Command::new("pacman").arg("-Qqe").output()?;
@@ -33,23 +34,24 @@ pub fn last_installed(config: &Config) -> Result<Output> {
         .map(ToString::to_string)
         .collect::<HashSet<_>>();
 
+    // To find unique values
+    let mut unique = HashSet::new();
+
     // Then reading the logs and showing the currently installed packages
     let file = File::open(PACMAN_LOG)?;
     let reader = BufReader::new(file);
-    let lines = reader
-        .lines()
-        .collect::<Vec<_>>();
+    let lines = reader.lines().collect::<Vec<_>>();
     let content = lines
         .into_iter()
         .rev()
         .filter_map(|line| {
             // Reading the relevant columns
             let line = line.ok()?;
-            let params = line.split(' ').collect::<Vec<_>>();
-            let timestamp = params.get(0)?;
-            let action = params.get(2)?.to_string();
-            let pkg = params.get(3)?.to_string();
-            let version = params.get(4)?;
+            let mut params = line.split_whitespace();
+            let time = params.next()?;
+            let action = params.nth(1)?;
+            let pkg = params.next()?;
+            let version = params.next()?;
 
             // Only installations
             if action != "installed" {
@@ -57,11 +59,15 @@ pub fn last_installed(config: &Config) -> Result<Output> {
             }
 
             // Only still installed packages
-            if !installed.contains(&pkg) {
+            if !installed.contains(pkg) {
                 return None;
             }
 
-            Some(format!("{} {} {}", timestamp, pkg, version))
+            if !unique.insert(pkg.to_string()) {
+                return None;
+            }
+
+            Some(format!("{} {} {}", time, pkg, version))
         })
         .take(config.max_packages)
         .collect::<Vec<_>>()
