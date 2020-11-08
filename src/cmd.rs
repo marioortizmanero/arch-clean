@@ -11,7 +11,21 @@ use anyhow::Result;
 
 const PACMAN_LOG: &str = "/var/log/pacman.log";
 
-pub fn last_installed(config: &Config) -> Result<String> {
+pub struct Output {
+    pub title: String,
+    pub content: String,
+}
+
+// Returns the home directory for the user executing the file
+fn get_home() -> String {
+    dirs::home_dir()
+        .unwrap()
+        .into_os_string()
+        .into_string()
+        .unwrap()
+}
+
+pub fn last_installed(config: &Config) -> Result<Output> {
     // First obtaining all installed packages
     let cmd = Command::new("pacman").arg("-Qqe").output()?;
     let installed = String::from_utf8(cmd.stdout)?
@@ -22,7 +36,7 @@ pub fn last_installed(config: &Config) -> Result<String> {
     // Then reading the logs and showing the currently installed packages
     let file = File::open(PACMAN_LOG)?;
     let reader = BufReader::new(file);
-    let out = reader
+    let content = reader
         .lines()
         .filter_map(|line| {
             // Reading the relevant columns
@@ -49,38 +63,53 @@ pub fn last_installed(config: &Config) -> Result<String> {
         .collect::<Vec<_>>()
         .join("\n");
 
-    Ok(out)
+    Ok(Output {
+        title: format!(
+            "Last {} explicitly installed packages (yay -Rns <pkg>)",
+            config.max_packages
+        ),
+        content,
+    })
 }
 
-pub fn orphan(_config: &Config) -> Result<String> {
+pub fn orphan(_config: &Config) -> Result<Output> {
     let cmd = Command::new("pacman").arg("-Qqtd").output()?;
-    let out = String::from_utf8(cmd.stdout)?;
+    let content = String::from_utf8(cmd.stdout)?;
 
-    Ok(out)
+    Ok(Output {
+        title: "Orphan packages (yay -Rns <pkg>)".to_string(),
+        content,
+    })
 }
 
-pub fn paccache(_config: &Config) -> Result<String> {
+pub fn paccache(_config: &Config) -> Result<Output> {
     let cmd = Command::new("paccache")
         .arg("-d")
         .arg("-v")
         .arg("--nocolor")
         .output()?;
-    let out = String::from_utf8(cmd.stdout)?;
+    let content = String::from_utf8(cmd.stdout)?;
 
-    Ok(out)
+    Ok(Output {
+        title: "Cache cleaning (paccache -r)".to_string(),
+        content,
+    })
 }
 
-pub fn trash_size(_config: &Config) -> Result<String> {
+pub fn trash_size(_config: &Config) -> Result<Output> {
     let cmd = Command::new("du")
         .arg("-hs")
-        .arg("~/.local/share/Trash")
+        .arg(get_home() + "/.local/share/Trash")
         .output()?;
-    let out = String::from_utf8(cmd.stdout)?;
+    let content = String::from_utf8(cmd.stdout)?;
 
-    Ok(out)
+    Ok(Output {
+        title: "Trash size (trash-empty)".to_string(),
+        content,
+    })
 }
 
-pub fn devel_updates(_config: &Config) -> Result<String> {
+pub fn devel_updates(_config: &Config) -> Result<Output> {
     let cmd = Command::new("yay")
         .arg("-Sua")
         .arg("--confirm")
@@ -88,7 +117,7 @@ pub fn devel_updates(_config: &Config) -> Result<String> {
         .stdin(Stdio::null()) // EOF for "dry run"
         .output()?;
     let stdout = String::from_utf8(cmd.stdout)?;
-    let out = stdout
+    let content = stdout
         .lines()
         .filter_map(|line| {
             if !line.to_string().contains("devel/") {
@@ -99,17 +128,18 @@ pub fn devel_updates(_config: &Config) -> Result<String> {
         .collect::<Vec<_>>()
         .join("\n");
 
-    Ok(out)
+    Ok(Output {
+        title: "Devel updates (yay -Syu --devel)".to_string(),
+        content,
+    })
 }
 
-pub fn nvim_swap_files(_config: &Config) -> Result<String> {
-    let home = dirs::home_dir()
-        .unwrap()
-        .into_os_string()
-        .into_string()
-        .unwrap();
-    let swap_dir = home + "/.local/share/nvim/swap";
-    let count = fs::read_dir(swap_dir)?.count();
+pub fn nvim_swap_files(_config: &Config) -> Result<Output> {
+    let swap_dir = get_home() + "/.local/share/nvim/swap";
+    let count = fs::read_dir(&swap_dir)?.count();
 
-    Ok(format!("{} files", count))
+    Ok(Output {
+        title: format!("NeoVim swap files (rm {}/*)", swap_dir),
+        content: format!("{} files", count),
+    })
 }
