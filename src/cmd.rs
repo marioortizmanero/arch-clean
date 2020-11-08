@@ -145,10 +145,22 @@ pub fn nvim_swap_files(_config: &Config) -> Result<Output> {
 }
 
 pub fn disk_usage(config: &Config) -> Result<Output> {
+    // Will only show the sizes of the directories in the current path.
+    let home = get_home();
+    let dirs = fs::read_dir(&home)?
+        .filter_map(|node| {
+            let node = node.ok()?;
+            if node.file_type().ok()?.is_dir() {
+                let name = node.file_name();
+                Some(format!("{}/{}", home, name.to_str().unwrap()))
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
     let mut cmd = Command::new("du")
-        .arg(get_home())
-        .arg("-cha")
-        .arg("--max-depth=1")
+        .arg("-sch")
+        .args(&dirs)
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()?;
@@ -165,6 +177,6 @@ pub fn disk_usage(config: &Config) -> Result<Output> {
 
     Ok(Output {
         title: format!("Disk usage distribution in home directory"),
-        content: out
+        content: out,
     })
 }
