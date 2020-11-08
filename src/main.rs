@@ -41,7 +41,7 @@ fn main() {
             cmd::last_installed,
         ),
         ("Orphan packages (yay -Rns <pkg>)", cmd::orphan),
-        ("Cache cleaning (yay -Syu --devel)", cmd::paccache),
+        ("Cache cleaning (paccache -r)", cmd::paccache),
         ("Trash size (trash-empty)", cmd::trash_size),
         ("Devel updates (yay -Syu --devel)", cmd::devel_updates),
         (
