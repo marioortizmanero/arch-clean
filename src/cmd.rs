@@ -10,7 +10,6 @@ use std::process::{Command, Stdio};
 use anyhow::Result;
 
 const PACMAN_LOG: &str = "/var/log/pacman.log";
-const NVIM_SWAP_DIR: &str = "~/.local/share/nvim/swap";
 
 pub fn last_installed(config: &Config) -> Result<String> {
     // First obtaining all installed packages
@@ -103,8 +102,14 @@ pub fn devel_updates(_config: &Config) -> Result<String> {
     return Ok(out);
 }
 
-pub fn swap_files(_config: &Config) -> Result<String> {
-    let count = fs::read_dir(NVIM_SWAP_DIR)?.count();
+pub fn nvim_swap_files(_config: &Config) -> Result<String> {
+    let home = dirs::home_dir()
+        .unwrap()
+        .into_os_string()
+        .into_string()
+        .unwrap();
+    let swap_dir = home + "/.local/share/nvim/swap";
+    let count = fs::read_dir(swap_dir)?.count();
 
     return Ok(format!("{} files", count));
 }

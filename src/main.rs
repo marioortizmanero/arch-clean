@@ -43,7 +43,7 @@ fn main() {
         ("Devel updates (yay -Syu --devel)", cmd::devel_updates),
         (
             "NeoVim swap files (rm ~/.local/share/nvim/swap/*)",
-            cmd::swap_files,
+            cmd::nvim_swap_files,
         ),
     ];
     let conf: Arc<Config> = Arc::new(argh::from_env());
