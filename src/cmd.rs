@@ -9,15 +9,10 @@ use std::collections::HashSet;
 
 use anyhow::Result;
 
-pub struct Output {
-    pub title: String,
-    pub content: String,
-}
-
 const PACMAN_LOG: &str = "/var/log/pacman.log";
 const NVIM_SWAP_DIR: &str = "~/.local/share/nvim/swap";
 
-pub fn last_installed(config: &Config) -> Result<Output> {
+pub fn last_installed(config: &Config) -> Result<String> {
     // First obtaining all installed packages
     let cmd = Command::new("pacman")
         .arg("-Qqe")
@@ -30,7 +25,7 @@ pub fn last_installed(config: &Config) -> Result<Output> {
     // Then reading the logs and showing the currently installed packages
     let file = File::open(PACMAN_LOG)?;
     let reader = BufReader::new(file);
-    let content = reader
+    let out = reader
         .lines()
         .filter_map(|line| {
             // Reading the relevant columns
@@ -57,52 +52,40 @@ pub fn last_installed(config: &Config) -> Result<Output> {
         .collect::<Vec<_>>()
         .join("\n");
 
-    return Ok(Output {
-        title: format!("Last {} explicitly installed packages", config.max_packages),
-        content
-    })
+    return Ok(out)
 }
 
-pub fn orphan(_config: &Config) -> Result<Output> {
+pub fn orphan(_config: &Config) -> Result<String> {
     let cmd = Command::new("pacman")
         .arg("-Qqtd")
         .output()?;
-    let content = String::from_utf8(cmd.stdout)?;
+    let out = String::from_utf8(cmd.stdout)?;
 
-    return Ok(Output {
-        title: "Orphan packages (yay -Rns <pkg>)".to_string(),
-        content
-    })
+    return Ok(out)
 }
 
-pub fn paccache(_config: &Config) -> Result<Output> {
+pub fn paccache(_config: &Config) -> Result<String> {
     let cmd = Command::new("paccache")
         .arg("-d")
         .arg("-v")
         .arg("--nocolor")
         .output()?;
-    let content = String::from_utf8(cmd.stdout)?;
+    let out = String::from_utf8(cmd.stdout)?;
 
-    return Ok(Output {
-        title: "Cache cleaning (yay -Syu --devel)".to_string(),
-        content
-    })
+    return Ok(out)
 }
 
-pub fn trash_size(_config: &Config) -> Result<Output> {
+pub fn trash_size(_config: &Config) -> Result<String> {
     let cmd = Command::new("du")
         .arg("-hs")
         .arg("~/.local/share/Trash")
         .output()?;
-    let content = String::from_utf8(cmd.stdout)?;
+    let out = String::from_utf8(cmd.stdout)?;
 
-    return Ok(Output {
-        title: "Trash size (trash-empty)".to_string(),
-        content
-    })
+    return Ok(out)
 }
 
-pub fn devel_updates(_config: &Config) -> Result<Output> {
+pub fn devel_updates(_config: &Config) -> Result<String> {
     let cmd = Command::new("yay")
         .arg("-Sua")
         .arg("--confirm")
@@ -110,7 +93,7 @@ pub fn devel_updates(_config: &Config) -> Result<Output> {
         .stdin(Stdio::null()) // EOF for "dry run"
         .output()?;
     let stdout = String::from_utf8(cmd.stdout)?;
-    let content = stdout
+    let out = stdout
         .lines()
         .filter_map(|line| {
             if !line.to_string().contains("devel/") {
@@ -121,18 +104,11 @@ pub fn devel_updates(_config: &Config) -> Result<Output> {
         .collect::<Vec<_>>()
         .join("\n");
 
-
-    return Ok(Output {
-        title: "Devel updates (yay -Syu --devel)".to_string(),
-        content
-    })
+    return Ok(out)
 }
 
-pub fn swap_files(_config: &Config) -> Result<Output> {
+pub fn swap_files(_config: &Config) -> Result<String> {
     let count = fs::read_dir(NVIM_SWAP_DIR)?.count();
 
-    return Ok(Output {
-        title: format!("Neovim swap files (rm {}/*)", NVIM_SWAP_DIR),
-        content: format!("{} files", count)
-    })
+    return Ok(format!("{} files", count))
 }
