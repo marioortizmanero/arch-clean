@@ -19,6 +19,7 @@ struct Output {
     content: String,
 }
 
+// Runs the command and sends the output to the main thread
 fn handle<T>(conf: &Config, wr: mpsc::Sender<Output>, title: &str, cmd: T)
 where
     T: Fn(&Config) -> Result<String>,
@@ -32,6 +33,8 @@ where
 }
 
 fn main() {
+    // The commands are accompanied by their titles and a suggested fix between
+    // parenthesis.
     let cmds: Vec<(&str, fn(&Config) -> Result<String>)> = vec![
         (
             "Last explicitly installed packages (yay -Rns <pkg>)",
@@ -46,11 +49,13 @@ fn main() {
             cmd::nvim_swap_files,
         ),
     ];
+
+    // Quick config with argh
     let conf: Arc<Config> = Arc::new(argh::from_env());
 
-    let mut handles = Vec::new();
-    let (wr, rd) = mpsc::channel();
     // A group of threads with the processes
+    let (wr, rd) = mpsc::channel();
+    let mut handles = Vec::new();
     for (title, cmd) in cmds {
         let wr = wr.clone();
         let conf = Arc::clone(&conf);
