@@ -54,7 +54,7 @@ fn main() {
         match out {
             Ok(out) => {
                 println!("\x1b[36m{}:\x1b[0m", out.title);
-                println!("{}", out.content);
+                println!("{}\n", out.content.trim());
             }
             Err(e) => {
                 eprintln!("Failed to run command: {}", e);

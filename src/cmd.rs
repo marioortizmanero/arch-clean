@@ -36,8 +36,12 @@ pub fn last_installed(config: &Config) -> Result<Output> {
     // Then reading the logs and showing the currently installed packages
     let file = File::open(PACMAN_LOG)?;
     let reader = BufReader::new(file);
-    let content = reader
+    let lines = reader
         .lines()
+        .collect::<Vec<_>>();
+    let content = lines
+        .into_iter()
+        .rev()
         .filter_map(|line| {
             // Reading the relevant columns
             let line = line.ok()?;
