@@ -7,4 +7,3 @@ edition = "2018"
 [dependencies]
 argh = "0.1.4"
 anyhow = "1.0.34"
-dirs = "3.0.1"

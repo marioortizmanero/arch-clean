@@ -2,6 +2,7 @@ use crate::Config;
 
 use std::collections::HashSet;
 use std::fs;
+use std::env;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
@@ -14,15 +15,6 @@ const PACMAN_LOG: &str = "/var/log/pacman.log";
 pub struct Output {
     pub title: String,
     pub content: String,
-}
-
-// Returns the home directory for the user executing the file
-fn get_home() -> String {
-    dirs::home_dir()
-        .unwrap()
-        .into_os_string()
-        .into_string()
-        .unwrap()
 }
 
 /// Will only work for pacman v5.2.0+
@@ -109,7 +101,7 @@ pub fn paccache(_config: &Config) -> Result<Output> {
 pub fn trash_size(_config: &Config) -> Result<Output> {
     let cmd = Command::new("du")
         .arg("-hs")
-        .arg(get_home() + "/.local/share/Trash")
+        .arg(env::var("HOME").unwrap() + "/.local/share/Trash")
         .output()?;
     let content = String::from_utf8(cmd.stdout)?;
 
@@ -145,7 +137,7 @@ pub fn devel_updates(_config: &Config) -> Result<Output> {
 }
 
 pub fn nvim_swap_files(_config: &Config) -> Result<Output> {
-    let swap_dir = get_home() + "/.local/share/nvim/swap";
+    let swap_dir = env::var("HOME").unwrap() + "/.local/share/nvim/swap";
     let count = fs::read_dir(&swap_dir)?.count();
 
     Ok(Output {
@@ -156,7 +148,7 @@ pub fn nvim_swap_files(_config: &Config) -> Result<Output> {
 
 pub fn disk_usage(config: &Config) -> Result<Output> {
     // Will only show the sizes of the directories in the current path.
-    let home = get_home();
+    let home = env::var("HOME").unwrap();
     let dirs = fs::read_dir(&home)?
         .filter_map(|node| {
             let node = node.ok()?;
