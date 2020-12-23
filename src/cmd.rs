@@ -1,8 +1,8 @@
 use crate::Config;
 
 use std::collections::HashSet;
-use std::fs;
 use std::env;
+use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
@@ -121,12 +121,7 @@ pub fn devel_updates(_config: &Config) -> Result<Output> {
     let stdout = String::from_utf8(cmd.stdout)?;
     let content = stdout
         .lines()
-        .filter_map(|line| {
-            if !line.to_string().contains("devel/") {
-                return None;
-            }
-            Some(line)
-        })
+        .filter(|line| line.to_string().contains("devel/"))
         .collect::<Vec<_>>()
         .join("\n");
 

@@ -23,7 +23,7 @@ pub struct Config {
 fn main() {
     // The commands are accompanied by their titles and a suggested fix between
     // parenthesis.
-    let cmds: Vec<fn(&Config) -> Result<Output>> = vec![
+    let cmds: &[fn(&Config) -> Result<Output>] = &[
         cmd::last_installed,
         cmd::orphan,
         cmd::paccache,
@@ -39,7 +39,7 @@ fn main() {
     // A group of threads with the processes
     let (wr, rd) = mpsc::channel();
     let mut handles = Vec::new();
-    for cmd in cmds {
+    for cmd in cmds.iter() {
         let wr = wr.clone();
         let conf = Arc::clone(&conf);
         handles.push(thread::spawn(move || {
