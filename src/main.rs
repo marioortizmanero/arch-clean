@@ -36,7 +36,7 @@ fn main() {
     ];
 
     // Quick config with argh
-    let conf: Arc<Config> = Arc::new(argh::from_env());
+    let conf = Arc::new(argh::from_env());
 
     // A group of threads with the processes
     let (wr, rd) = mpsc::channel();
