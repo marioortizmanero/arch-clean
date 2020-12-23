@@ -19,15 +19,23 @@ pub struct Output {
 
 /// Will only work for pacman v5.2.0+
 pub fn last_installed(config: &Config) -> Result<Output> {
+    // Represents an entry in the Pacman logs
+    struct LogEntry {
+        time: String,
+        action: String,
+        pkg: String,
+        version: String,
+    }
+
     // First obtaining all installed packages
     let cmd = Command::new("pacman").arg("-Qqe").output()?;
-    let installed = String::from_utf8(cmd.stdout)?;
-    let installed = installed.lines().collect::<HashSet<_>>();
+    let stdout = String::from_utf8(cmd.stdout)?;
+    let installed = stdout.lines().collect::<HashSet<_>>();
 
-    // To find unique values
+    // To find unique package entries
     let mut unique = HashSet::new();
 
-    // Then reading the logs and showing the currently installed packages
+    // Then iterating the logs, from the bottom to the top
     let file = File::open(PACMAN_LOG)?;
     let reader = BufReader::new(file);
     let lines = reader.lines().collect::<Vec<_>>();
@@ -38,27 +46,18 @@ pub fn last_installed(config: &Config) -> Result<Output> {
             // Reading the relevant columns
             let line = line.ok()?;
             let mut params = line.split_whitespace();
-            let time = params.next()?;
-            let action = params.nth(1)?;
-            let pkg = params.next()?;
-            let version = params.next()?;
 
-            // Only installations
-            if action != "installed" {
-                return None;
-            }
-
-            // Only still installed packages
-            if !installed.contains(pkg) {
-                return None;
-            }
-
-            if !unique.insert(pkg.to_string()) {
-                return None;
-            }
-
-            Some(format!("{} {} {}", time, pkg, version))
+            Some(LogEntry {
+                time: params.next()?.to_string(),
+                action: params.nth(1)?.to_string(),
+                pkg: params.next()?.to_string(),
+                version: params.next()?.to_string(),
+            })
         })
+        .filter(|e| e.action == "installed") // Only installations
+        .filter(|e| !installed.contains(e.pkg.as_str())) // Only still installed packages
+        .filter(|e| unique.insert(e.pkg.clone())) // Unique
+        .map(|e| format!("{} {} {}", e.time, e.pkg, e.version))
         .take(config.max_packages)
         .collect::<Vec<_>>()
         .join("\n");
@@ -153,6 +152,7 @@ pub fn disk_usage(config: &Config) -> Result<Output> {
             }
         })
         .collect::<Vec<_>>();
+
     let mut cmd = Command::new("du")
         .arg("-sch")
         .args(&dirs)
@@ -171,7 +171,7 @@ pub fn disk_usage(config: &Config) -> Result<Output> {
         .join("\n");
 
     Ok(Output {
-        title: format!("Disk usage distribution in home directory"),
+        title: "Disk usage distribution in home directory".to_string(),
         content: out,
     })
 }
