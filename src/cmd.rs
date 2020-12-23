@@ -21,10 +21,8 @@ pub struct Output {
 pub fn last_installed(config: &Config) -> Result<Output> {
     // First obtaining all installed packages
     let cmd = Command::new("pacman").arg("-Qqe").output()?;
-    let installed = String::from_utf8(cmd.stdout)?
-        .lines()
-        .map(ToString::to_string)
-        .collect::<HashSet<_>>();
+    let installed = String::from_utf8(cmd.stdout)?;
+    let installed = installed.lines().collect::<HashSet<_>>();
 
     // To find unique values
     let mut unique = HashSet::new();
