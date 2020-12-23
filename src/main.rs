@@ -10,6 +10,8 @@ use argh::FromArgs;
 
 #[derive(FromArgs)]
 /// Clean up your Arch installation, real fast.
+///
+/// Output format: "name [suggestion]".
 pub struct Config {
     /// maximum of explicitly installed packages to be shown
     #[argh(option, default = "10")]
@@ -25,11 +27,11 @@ fn main() {
     // parenthesis.
     let cmds: &[fn(&Config) -> Result<Output>] = &[
         cmd::last_installed,
-        cmd::orphan,
+        cmd::orphans,
         cmd::paccache,
         cmd::trash_size,
         cmd::disk_usage,
-        cmd::devel_updates,
+        cmd::dev_updates,
         cmd::nvim_swap_files,
     ];
 

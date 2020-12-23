@@ -67,19 +67,19 @@ pub fn last_installed(config: &Config) -> Result<Output> {
 
     Ok(Output {
         title: format!(
-            "Last {} explicitly installed packages (yay -Rns <pkg>)",
+            "Last {} explicitly installed packages [yay -Rns <pkg>]",
             config.max_packages
         ),
         content,
     })
 }
 
-pub fn orphan(_config: &Config) -> Result<Output> {
+pub fn orphans(_config: &Config) -> Result<Output> {
     let cmd = Command::new("pacman").arg("-Qqtd").output()?;
     let content = String::from_utf8(cmd.stdout)?;
 
     Ok(Output {
-        title: "Orphan packages (yay -Rns <pkg>)".to_string(),
+        title: "Orphan packages [yay -Rns <pkg>]".to_string(),
         content,
     })
 }
@@ -93,7 +93,7 @@ pub fn paccache(_config: &Config) -> Result<Output> {
     let content = String::from_utf8(cmd.stdout)?;
 
     Ok(Output {
-        title: "Cache cleaning (paccache -r)".to_string(),
+        title: "Cache cleaning [paccache -r]".to_string(),
         content,
     })
 }
@@ -106,12 +106,12 @@ pub fn trash_size(_config: &Config) -> Result<Output> {
     let content = String::from_utf8(cmd.stdout)?;
 
     Ok(Output {
-        title: "Trash size (trash-empty)".to_string(),
+        title: "Trash size [trash-empty]".to_string(),
         content,
     })
 }
 
-pub fn devel_updates(_config: &Config) -> Result<Output> {
+pub fn dev_updates(_config: &Config) -> Result<Output> {
     let cmd = Command::new("yay")
         .arg("-Sua")
         .arg("--confirm")
@@ -126,7 +126,7 @@ pub fn devel_updates(_config: &Config) -> Result<Output> {
         .join("\n");
 
     Ok(Output {
-        title: "Devel updates (yay -Syu --devel)".to_string(),
+        title: "Developer updates [yay -Syu --devel]".to_string(),
         content,
     })
 }
@@ -136,7 +136,7 @@ pub fn nvim_swap_files(_config: &Config) -> Result<Output> {
     let count = fs::read_dir(&swap_dir)?.count();
 
     Ok(Output {
-        title: format!("NeoVim swap files (rm {}/*)", swap_dir),
+        title: format!("NeoVim swap files [rm {}/*]", swap_dir),
         content: format!("{} files", count),
     })
 }
