@@ -55,7 +55,7 @@ pub fn last_installed(config: &Config) -> Result<Output> {
             })
         })
         .filter(|e| e.action == "installed") // Only installations
-        .filter(|e| !installed.contains(e.pkg.as_str())) // Only still installed packages
+        .filter(|e| installed.contains(e.pkg.as_str())) // Only still installed packages
         .filter(|e| unique.insert(e.pkg.clone())) // Unique
         .map(|e| format!("{} {} {}", e.time, e.pkg, e.version))
         .take(config.max_packages)
@@ -90,7 +90,7 @@ pub fn paccache(_config: &Config) -> Result<Output> {
     let content = String::from_utf8(cmd.stdout)?;
 
     Ok(Output {
-        title: "Cache cleaning [paccache -r]".to_string(),
+        title: "Cache cleaning [paccache -r, yay -Sc]".to_string(),
         content,
     })
 }
