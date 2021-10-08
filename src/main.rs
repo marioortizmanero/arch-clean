@@ -3,13 +3,13 @@ mod cmd;
 use cmd::{CleanupCommand, Output};
 
 use std::{
-    sync::{mpsc, Arc},
-    thread,
+    io::{self, Write},
+    sync::Arc,
 };
 
 use anyhow::Result;
 use argh::FromArgs;
-use async_std::task;
+use tokio::{sync::mpsc, task};
 
 #[derive(FromArgs)]
 /// Clean up your Arch installation, real fast.
@@ -29,47 +29,81 @@ pub struct Config {
     max_disk_usage: usize,
 }
 
+// #[derive(Debug)]
+pub struct CheckDone {
+    cmd: Box<dyn CleanupCommand>,
+    output: Result<Output>,
+}
+
+impl std::fmt::Debug for Box<dyn CleanupCommand> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        todo!()
+    }
+}
+
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<()> {
     // The commands are accompanied by their titles and a suggested fix between
     // parenthesis.
-    let cmds: [Box<dyn CleanupCommand>; 2] = [
-        // cmd::last_installed,
-        // cmd::orphans,
-        // cmd::paccache,
-        // cmd::trash_size,
+    let cmds: [Box<dyn CleanupCommand>; 8] = [
+        Box::new(cmd::LastInstalled::default()),
+        Box::new(cmd::OrphanPackages::default()),
+        Box::new(cmd::Paccache::default()),
+        Box::new(cmd::TrashSize::default()),
         Box::new(cmd::DiskUsage::default()),
-        // cmd::dev_updates,
-        // cmd::nvim_swap_files,
+        Box::new(cmd::DevUpdates::default()),
+        Box::new(cmd::NeovimSwapFiles::default()),
         Box::new(cmd::RustTarget::default()),
     ];
+    let num_cmds = cmds.len();
 
     // Quick config with argh
     let conf = Arc::new(argh::from_env());
 
-    // A group of threads with the processes
-    let (wr, rd) = mpsc::channel();
+    // The check commands are each run in a separate task
+    let (wr, mut rd) = mpsc::unbounded_channel();
     let mut handles = Vec::new();
     for mut cmd in cmds {
         let wr = wr.clone();
         let conf = Arc::clone(&conf);
         handles.push(task::spawn(async move {
-            let output = cmd.check(&conf);
-            wr.send(output).unwrap();
-
-            if conf.apply {
-                cmd.apply(&conf);
-            }
+            let output = cmd.check(&conf).await;
+            wr.send((cmd, output)).unwrap();
         }));
     }
+    drop(wr);
 
-    // Stdout synchronized output
-    for _ in 0..handles.len() {
-        let out = rd.recv().unwrap();
+    // Synchonizing the results and saving them for later
+    let mut checks = Vec::new();
+    while let Some(msg) = rd.recv().await {
+        checks.push(msg);
+
+        // Report progress
+        print!(".");
+        io::stdout().flush().unwrap()
+    }
+
+    // Wait for any work left
+    for handle in handles {
+        handle.await.expect("Failed to join task");
+    }
+
+    // Applying the fix if indicated
+    for (cmd, out) in checks {
         match out {
             Ok(out) => {
-                println!("\x1b[36m{}:\x1b[0m", out.title);
+                let fix = if out.fix_available {
+                    " (fix available)"
+                } else {
+                    ""
+                };
+                println!("\x1b[36m{}{}:\x1b[0m", out.title, fix);
                 println!("{}\n", out.content.trim());
+                if conf.apply && out.fix_available {
+                    cmd.apply_fix(&conf).await.unwrap_or_else(|e| {
+                        eprintln!("Failed to apply fix: {}", e);
+                    })
+                }
             }
             Err(e) => {
                 eprintln!("Failed to run command: {}", e);
@@ -77,8 +111,5 @@ async fn main() {
         }
     }
 
-    // Wait for any work left
-    for handle in handles {
-        handle.await.expect("Failed to join task");
-    }
+    Ok(())
 }
