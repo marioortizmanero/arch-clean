@@ -1,12 +1,13 @@
 use crate::Config;
 
-use std::collections::HashSet;
-use std::env;
-use std::fs;
-use std::fs::File;
-use std::io::prelude::*;
-use std::io::BufReader;
-use std::process::{Command, Stdio};
+use std::{
+    collections::HashSet,
+    env, fs,
+    fs::File,
+    io::{prelude::*, BufReader},
+    path::PathBuf,
+    process::{Command, Stdio},
+};
 
 use anyhow::Result;
 
@@ -15,6 +16,14 @@ const PACMAN_LOG: &str = "/var/log/pacman.log";
 pub struct Output {
     pub title: String,
     pub content: String,
+}
+
+pub trait CleanupCommand: Sync + Send {
+    fn check(&mut self, config: &Config) -> Result<Output>;
+
+    fn apply(&self, _config: &Config) -> Result<()> {
+        Ok(())
+    }
 }
 
 /// Will only work for pacman v5.2.0+
@@ -138,100 +147,122 @@ pub fn nvim_swap_files(_config: &Config) -> Result<Output> {
     })
 }
 
-pub fn disk_usage(config: &Config) -> Result<Output> {
-    // Will only show the sizes of the directories in the current path.
-    let home = env::var("HOME").unwrap();
-    let dirs = fs::read_dir(&home)?
-        .filter_map(|node| {
-            let node = node.ok()?;
-            if node.file_type().ok()?.is_dir() {
-                let name = node.file_name();
-                Some(format!("{}/{}", home, name.to_str().unwrap()))
-            } else {
-                None
-            }
+#[derive(Default)]
+pub struct DiskUsage;
+impl CleanupCommand for DiskUsage {
+    fn check(&mut self, config: &Config) -> Result<Output> {
+        // Will only show the sizes of the directories in the current path.
+        let home = env::var("HOME").unwrap();
+        let dirs = fs::read_dir(&home)?
+            .filter_map(|node| {
+                let node = node.ok()?;
+                if node.file_type().ok()?.is_dir() {
+                    let name = node.file_name();
+                    Some(format!("{}/{}", home, name.to_str().unwrap()))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let mut cmd = Command::new("du")
+            .arg("-sch")
+            .args(&dirs)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()?;
+        cmd.wait()?;
+        let cmd = Command::new("sort")
+            .arg("-rh")
+            .stdin(cmd.stdout.take().unwrap())
+            .output()?;
+        let out = String::from_utf8(cmd.stdout)?
+            .lines()
+            .take(config.max_disk_usage)
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        Ok(Output {
+            title: "Disk usage distribution in home directory".to_string(),
+            content: out,
         })
-        .collect::<Vec<_>>();
-
-    let mut cmd = Command::new("du")
-        .arg("-sch")
-        .args(&dirs)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()?;
-    cmd.wait()?;
-    let cmd = Command::new("sort")
-        .arg("-rh")
-        .stdin(cmd.stdout.take().unwrap())
-        .output()?;
-    let out = String::from_utf8(cmd.stdout)?
-        .lines()
-        .take(config.max_disk_usage)
-        .collect::<Vec<_>>()
-        .join("\n");
-
-    Ok(Output {
-        title: "Disk usage distribution in home directory".to_string(),
-        content: out,
-    })
+    }
 }
 
-pub fn rust_target(_config: &Config) -> Result<Output> {
-    // First finding all Rust projects
-    let cmd = Command::new("find")
-        .arg(env::var("HOME").unwrap())
-        .arg("-name")
-        .arg("Cargo.toml")
-        .arg("-type")
-        .arg("f") // In those directories with a `Cargo.toml` file
-        .arg("-not")
-        .arg("-path")
-        .arg("*/\\.*") // That aren't in hidden dirs like `.cache`
-        .arg("-exec")
-        .arg("dirname")
-        .arg("{}")
-        .arg(";")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .output()?;
-    let dirs = String::from_utf8(cmd.stdout)?;
-
-    // Then looking for the `target` directories
-    let mut total_kb = 0;
-    for dir in dirs.lines() {
+#[derive(Default)]
+pub struct RustTarget {
+    dirs: Vec<PathBuf>,
+}
+impl CleanupCommand for RustTarget {
+    fn check(&mut self, _config: &Config) -> Result<Output> {
+        // First finding all Rust projects
         let cmd = Command::new("find")
-            .arg(dir)
+            .arg(env::var("HOME").unwrap())
             .arg("-name")
-            .arg("target")
+            .arg("Cargo.toml")
             .arg("-type")
-            .arg("d") // In those directories with a `Cargo.toml` file
+            .arg("f") // In those directories with a `Cargo.toml` file
+            .arg("-not")
+            .arg("-path")
+            .arg("*/\\.*") // That aren't in hidden dirs like `.cache`
             .arg("-exec")
-            .arg("du")
-            .arg("-s")
-            .arg("{}") // Get the size of the target directory
+            .arg("dirname")
+            .arg("{}")
             .arg(";")
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .output()?;
+        let dirs = String::from_utf8(cmd.stdout)?;
 
-        // Sum the kilobytes of each directory
-        let stdout = String::from_utf8(cmd.stdout)?;
-        let dir_kb: i32 = stdout
-            .lines()
-            .map(|line| {
-                let mut fields = line.split_whitespace();
-                match fields.next() {
-                    Some(kb) => kb.parse().unwrap_or(0),
-                    None => 0,
-                }
-            })
-            .sum();
-        total_kb += dir_kb;
+        // Then looking for the `target` directories
+        let mut total_kb = 0;
+        for dir in dirs.lines() {
+            let cmd = Command::new("find")
+                .arg(dir)
+                .arg("-name")
+                .arg("target")
+                .arg("-type")
+                .arg("d") // In those directories with a `Cargo.toml` file
+                .arg("-exec")
+                .arg("du")
+                .arg("-s")
+                .arg("{}") // Get the size of the target directory
+                .arg(";")
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .output()?;
+
+            // Sum the kilobytes of each directory
+            let stdout = String::from_utf8(cmd.stdout)?;
+            let dir_kb: i32 = stdout
+                .lines()
+                .map(|line| {
+                    let mut fields = line.split_whitespace();
+                    match fields.next() {
+                        Some(kb) => kb.parse().unwrap_or(0),
+                        None => 0,
+                    }
+                })
+                .sum();
+
+            // If it's not empty, add it to the list and add to the total size
+            if dir_kb > 0 {
+                self.dirs.push(PathBuf::from(dir));
+                total_kb += dir_kb;
+            }
+        }
+
+        Ok(Output {
+            title: "Size of Rust target directories [cargo-clean]".to_string(),
+            content: format!("{} MB", total_kb / 1024),
+        })
     }
 
+    fn apply(&self, _config: &Config) -> Result<()> {
+        for dir in &self.dirs {
+            fs::remove_dir_all(dir)?
+        }
 
-    Ok(Output {
-        title: "Size of Rust target directories [cargo-clean]".to_string(),
-        content: format!("{} MB", total_kb / 1024)
-    })
+        Ok(())
+    }
 }

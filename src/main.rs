@@ -1,18 +1,25 @@
 mod cmd;
 
-use cmd::Output;
+use cmd::{CleanupCommand, Output};
 
-use std::sync::{mpsc, Arc};
-use std::thread;
+use std::{
+    sync::{mpsc, Arc},
+    thread,
+};
 
 use anyhow::Result;
 use argh::FromArgs;
+use async_std::task;
 
 #[derive(FromArgs)]
 /// Clean up your Arch installation, real fast.
 ///
 /// Output format: "name [suggestion]".
 pub struct Config {
+    /// apply the suggested fix
+    #[argh(option, default = "false")]
+    apply: bool,
+
     /// maximum of explicitly installed packages to be shown
     #[argh(option, default = "10")]
     max_packages: usize,
@@ -22,18 +29,19 @@ pub struct Config {
     max_disk_usage: usize,
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     // The commands are accompanied by their titles and a suggested fix between
     // parenthesis.
-    let cmds: &[fn(&Config) -> Result<Output>] = &[
-        cmd::last_installed,
-        cmd::orphans,
-        cmd::paccache,
-        cmd::trash_size,
-        cmd::disk_usage,
-        cmd::dev_updates,
-        cmd::nvim_swap_files,
-        cmd::rust_target,
+    let cmds: [Box<dyn CleanupCommand>; 2] = [
+        // cmd::last_installed,
+        // cmd::orphans,
+        // cmd::paccache,
+        // cmd::trash_size,
+        Box::new(cmd::DiskUsage::default()),
+        // cmd::dev_updates,
+        // cmd::nvim_swap_files,
+        Box::new(cmd::RustTarget::default()),
     ];
 
     // Quick config with argh
@@ -42,12 +50,16 @@ fn main() {
     // A group of threads with the processes
     let (wr, rd) = mpsc::channel();
     let mut handles = Vec::new();
-    for cmd in cmds.iter() {
+    for mut cmd in cmds {
         let wr = wr.clone();
         let conf = Arc::clone(&conf);
-        handles.push(thread::spawn(move || {
-            let output = cmd(&conf);
+        handles.push(task::spawn(async move {
+            let output = cmd.check(&conf);
             wr.send(output).unwrap();
+
+            if conf.apply {
+                cmd.apply(&conf);
+            }
         }));
     }
 
@@ -67,6 +79,6 @@ fn main() {
 
     // Wait for any work left
     for handle in handles {
-        handle.join().unwrap();
+        handle.await.expect("Failed to join task");
     }
 }
