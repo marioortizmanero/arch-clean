@@ -33,6 +33,7 @@ fn main() {
         cmd::disk_usage,
         cmd::dev_updates,
         cmd::nvim_swap_files,
+        cmd::rust_target,
     ];
 
     // Quick config with argh

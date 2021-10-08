@@ -175,3 +175,63 @@ pub fn disk_usage(config: &Config) -> Result<Output> {
         content: out,
     })
 }
+
+pub fn rust_target(_config: &Config) -> Result<Output> {
+    // First finding all Rust projects
+    let cmd = Command::new("find")
+        .arg(env::var("HOME").unwrap())
+        .arg("-name")
+        .arg("Cargo.toml")
+        .arg("-type")
+        .arg("f") // In those directories with a `Cargo.toml` file
+        .arg("-not")
+        .arg("-path")
+        .arg("*/\\.*") // That aren't in hidden dirs like `.cache`
+        .arg("-exec")
+        .arg("dirname")
+        .arg("{}")
+        .arg(";")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .output()?;
+    let dirs = String::from_utf8(cmd.stdout)?;
+
+    // Then looking for the `target` directories
+    let mut total_kb = 0;
+    for dir in dirs.lines() {
+        let cmd = Command::new("find")
+            .arg(dir)
+            .arg("-name")
+            .arg("target")
+            .arg("-type")
+            .arg("d") // In those directories with a `Cargo.toml` file
+            .arg("-exec")
+            .arg("du")
+            .arg("-s")
+            .arg("{}") // Get the size of the target directory
+            .arg(";")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .output()?;
+
+        // Sum the kilobytes of each directory
+        let stdout = String::from_utf8(cmd.stdout)?;
+        let dir_kb: i32 = stdout
+            .lines()
+            .map(|line| {
+                let mut fields = line.split_whitespace();
+                match fields.next() {
+                    Some(kb) => kb.parse().unwrap_or(0),
+                    None => 0,
+                }
+            })
+            .sum();
+        total_kb += dir_kb;
+    }
+
+
+    Ok(Output {
+        title: "Size of Rust target directories [cargo-clean]".to_string(),
+        content: format!("{} MB", total_kb / 1024)
+    })
+}
