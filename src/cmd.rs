@@ -218,7 +218,7 @@ impl CleanupCommand for DevUpdates {
             .filter(|line| line.to_string().contains("devel/"))
             .collect::<Vec<_>>()
             .join("\n");
-        let fix_available = stdout.lines().count() > 0;
+        let fix_available = content.lines().count() > 0;
         // Default message instead of empty string
         if content.len() == 0 {
             content.push_str("(none)");
