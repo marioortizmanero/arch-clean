@@ -13,8 +13,6 @@ use tokio::{sync::mpsc, task};
 
 #[derive(FromArgs)]
 /// Clean up your Arch installation, real fast.
-///
-/// Output format: "name [suggestion]".
 pub struct Config {
     /// apply the suggested fix
     #[argh(switch)]
