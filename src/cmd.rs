@@ -25,8 +25,14 @@ pub struct Output {
 
 #[async_trait]
 pub trait CleanupCommand: Sync + Send {
+    /// Runs the command and checks the output
     async fn check(&mut self, config: &Config) -> Result<Output>;
 
+    /// Non-blocking, this will just show the user what `apply_fix` does. By
+    /// default it's nothing.
+    fn show_fix(&self, _config: &Config) {}
+
+    /// Applies the suggested fix for the command. By default it's nothing.
     async fn apply_fix(&self, _config: &Config) -> Result<()> {
         Ok(())
     }
@@ -82,10 +88,7 @@ impl CleanupCommand for LastInstalled {
             .join("\n");
 
         Ok(Output {
-            title: format!(
-                "Last {} explicitly installed packages [yay -Rns <pkg>]",
-                config.max_packages
-            ),
+            title: format!("Last {} explicitly installed packages", config.max_packages),
             content,
             fix_available: false,
         })
@@ -93,18 +96,42 @@ impl CleanupCommand for LastInstalled {
 }
 
 #[derive(Default)]
-pub struct OrphanPackages;
+pub struct OrphanPackages {
+    pkgs: Vec<String>,
+}
 #[async_trait]
 impl CleanupCommand for OrphanPackages {
     async fn check(&mut self, _config: &Config) -> Result<Output> {
         let cmd = Command::new("pacman").arg("-Qqtd").output().await?;
-        let content = String::from_utf8(cmd.stdout)?;
+        let mut content = String::from_utf8(cmd.stdout)?;
+        self.pkgs = content.lines().map(ToString::to_string).collect();
+        // Default message instead of empty string
+        if content.len() == 0 {
+            content.push_str("(none)");
+        }
 
         Ok(Output {
-            title: "Orphan packages [yay -Rns <pkg>]".to_string(),
+            title: "Orphan packages".to_string(),
             content,
-            fix_available: true,
+            fix_available: self.pkgs.len() > 0,
         })
+    }
+
+    fn show_fix(&self, _config: &Config) {
+        let pkgs = self.pkgs.join(" ");
+        println!("This fix will run the command:");
+        println!("  yay -Rns --noconfirm {}", pkgs);
+    }
+
+    async fn apply_fix(&self, _config: &Config) -> Result<()> {
+        Command::new("yay")
+            .arg("-Rns")
+            .arg("--noconfirm")
+            .args(&self.pkgs)
+            .output()
+            .await?;
+
+        Ok(())
     }
 }
 
@@ -120,14 +147,22 @@ impl CleanupCommand for Paccache {
             .output()
             .await?;
         let content = String::from_utf8(cmd.stdout)?;
+        let fix_available = content.lines().count() != 1;
 
         Ok(Output {
-            title: "Cache cleaning [paccache -r, yay -Sc]".to_string(),
+            title: "Cache cleaning".to_string(),
             content,
-            fix_available: true,
+            fix_available,
         })
     }
 }
+
+/// TODO: yay cache
+/// yay -Sc
+///
+/// /var/cache/pacman/pkg/ -- cache
+/// /var/lib/pacman/ -- repos
+/// /home/mario/.cache/yay -- build
 
 #[derive(Default)]
 pub struct TrashSize;
@@ -140,12 +175,28 @@ impl CleanupCommand for TrashSize {
             .output()
             .await?;
         let content = String::from_utf8(cmd.stdout)?;
+        // The trash can be emptied only when the size shown by du is other than
+        // zero.
+        let fix_available = match content.split_whitespace().next() {
+            Some("0") => false,
+            _ => true,
+        };
 
         Ok(Output {
-            title: "Trash size [trash-empty]".to_string(),
+            title: "Trash size".to_string(),
             content,
-            fix_available: true,
+            fix_available,
         })
+    }
+
+    fn show_fix(&self, _config: &Config) {
+        println!("This fix will run the command 'trash-empty'");
+    }
+
+    async fn apply_fix(&self, _config: &Config) -> Result<()> {
+        Command::new("trash-empty").output().await?;
+
+        Ok(())
     }
 }
 
@@ -167,30 +218,55 @@ impl CleanupCommand for DevUpdates {
             .filter(|line| line.to_string().contains("devel/"))
             .collect::<Vec<_>>()
             .join("\n");
+        let fix_available = stdout.lines().count() > 0;
 
         Ok(Output {
-            title: "Developer updates [yay -Syu --devel]".to_string(),
+            title: "Developer updates".to_string(),
             content,
-            fix_available: true,
+            fix_available,
         })
+    }
+
+    fn show_fix(&self, _config: &Config) {
+        println!("This fix will run the command 'yay -Syu --devel'");
+    }
+
+    async fn apply_fix(&self, _config: &Config) -> Result<()> {
+        let mut cmd = Command::new("yay").arg("-Syu").arg("--devel").spawn()?;
+        cmd.wait().await?;
+
+        Ok(())
     }
 }
 
 #[derive(Default)]
-pub struct NeovimSwapFiles;
+pub struct NeovimSwapFiles {
+    swap_dir: String,
+}
 #[async_trait]
 impl CleanupCommand for NeovimSwapFiles {
     async fn check(&mut self, _config: &Config) -> Result<Output> {
-        let swap_dir = env::var("HOME").unwrap() + "/.local/share/nvim/swap";
-        let count = ReadDirStream::new(fs::read_dir(&swap_dir).await?)
-            .fold(0, |acc, _| acc + 1) // No `.count` available yet
-            .await;
+        self.swap_dir = env::var("HOME").unwrap() + "/.local/share/nvim/swap";
+        let count = match fs::read_dir(&self.swap_dir).await {
+            Err(_) => 0,
+            Ok(dir) => ReadDirStream::new(dir).fold(0, |acc, _| acc + 1).await, // No `.count` available yet
+        };
 
         Ok(Output {
-            title: format!("NeoVim swap files [rm {}/*]", swap_dir),
+            title: format!("NeoVim swap files"),
             content: format!("{} files", count),
-            fix_available: true,
+            fix_available: count > 0,
         })
+    }
+
+    fn show_fix(&self, _config: &Config) {
+        println!("This fix will remove the directory '{}'", self.swap_dir);
+    }
+
+    async fn apply_fix(&self, _config: &Config) -> Result<()> {
+        fs::remove_dir_all(&self.swap_dir).await?;
+
+        Ok(())
     }
 }
 
@@ -287,29 +363,37 @@ impl CleanupCommand for RustTarget {
 
             // Sum the kilobytes of each directory
             let stdout = String::from_utf8(cmd.stdout)?;
-            let dir_kb: i32 = stdout
+            let output = stdout
                 .lines()
-                .map(|line| {
-                    let mut fields = line.split_whitespace();
-                    match fields.next() {
-                        Some(kb) => kb.parse().unwrap_or(0),
-                        None => 0,
-                    }
+                .map(|line| match line.split_once('\t') {
+                    Some((kb, path)) => (kb.parse().unwrap_or(0), PathBuf::from(path)),
+                    None => panic!("unexpected output from `du`: {}", line),
                 })
-                .sum();
+                .filter(|(ref kb, _)| kb > &0)
+                .collect::<Vec<_>>();
 
-            // If it's not empty, add it to the list and add to the total size
-            if dir_kb > 0 {
-                self.dirs.push(PathBuf::from(dir));
+            // If it's not empty, insert the directories into the list and add
+            // to the total size
+            if output.len() > 0 {
+                let dir_kb: i32 = output.iter().map(|(kb, _)| kb).sum();
                 total_kb += dir_kb;
+
+                self.dirs.extend(output.into_iter().map(|(_, path)| path));
             }
         }
 
         Ok(Output {
-            title: "Size of Rust target directories [cargo-clean]".to_string(),
+            title: "Size of Rust target directories".to_string(),
             content: format!("{} MB", total_kb / 1024),
             fix_available: true,
         })
+    }
+
+    fn show_fix(&self, _config: &Config) {
+        println!("This fix will remove the following directories:");
+        for dir in &self.dirs {
+            println!("* {}", dir.to_str().unwrap());
+        }
     }
 
     async fn apply_fix(&self, _config: &Config) -> Result<()> {

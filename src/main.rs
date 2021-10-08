@@ -1,6 +1,6 @@
 mod cmd;
 
-use cmd::{CleanupCommand, Output};
+use cmd::CleanupCommand;
 
 use std::{
     io::{self, Write},
@@ -17,7 +17,7 @@ use tokio::{sync::mpsc, task};
 /// Output format: "name [suggestion]".
 pub struct Config {
     /// apply the suggested fix
-    #[argh(option, default = "false")]
+    #[argh(switch)]
     apply: bool,
 
     /// maximum of explicitly installed packages to be shown
@@ -29,15 +29,9 @@ pub struct Config {
     max_disk_usage: usize,
 }
 
-// #[derive(Debug)]
-pub struct CheckDone {
-    cmd: Box<dyn CleanupCommand>,
-    output: Result<Output>,
-}
-
 impl std::fmt::Debug for Box<dyn CleanupCommand> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
+        f.write_str("cleanup command")
     }
 }
 
@@ -55,7 +49,6 @@ async fn main() -> Result<()> {
         Box::new(cmd::NeovimSwapFiles::default()),
         Box::new(cmd::RustTarget::default()),
     ];
-    let num_cmds = cmds.len();
 
     // Quick config with argh
     let conf = Arc::new(argh::from_env());
@@ -71,44 +64,56 @@ async fn main() -> Result<()> {
             wr.send((cmd, output)).unwrap();
         }));
     }
-    drop(wr);
+    drop(wr); // The channel will be closed automatically
 
-    // Synchonizing the results and saving them for later
-    let mut checks = Vec::new();
-    while let Some(msg) = rd.recv().await {
-        checks.push(msg);
-
-        // Report progress
-        print!(".");
-        io::stdout().flush().unwrap()
-    }
-
-    // Wait for any work left
-    for handle in handles {
-        handle.await.expect("Failed to join task");
-    }
-
-    // Applying the fix if indicated
-    for (cmd, out) in checks {
+    // Synchonizing the results from the tasks
+    while let Some((cmd, out)) = rd.recv().await {
         match out {
             Ok(out) => {
+                // Printing the status
                 let fix = if out.fix_available {
                     " (fix available)"
                 } else {
                     ""
                 };
-                println!("\x1b[36m{}{}:\x1b[0m", out.title, fix);
+                println!("\x1b[36;1m{}{}:\x1b[0m", out.title, fix);
                 println!("{}\n", out.content.trim());
-                if conf.apply && out.fix_available {
-                    cmd.apply_fix(&conf).await.unwrap_or_else(|e| {
-                        eprintln!("Failed to apply fix: {}", e);
-                    })
+
+                // The fix will only be applied if it's configured and if the
+                // command actually has a fix available
+                if !conf.apply || !out.fix_available {
+                    continue;
                 }
+
+                // The fix is a two-step process, first we make sure that
+                // the user wants to continue
+                cmd.show_fix(&conf);
+                print!("\x1b[33mConfirm? [y/N]:\x1b[0m ");
+                let mut confirm = String::new();
+                io::stdout().flush()?;
+                io::stdin().read_line(&mut confirm)?;
+                if confirm.trim() != "y" {
+                    println!("\x1b[31mSkipped\x1b[0m\n");
+                    continue;
+                }
+
+                // They are applied sequentially so that the user sees the
+                // results of the command.
+                cmd.apply_fix(&conf).await.unwrap_or_else(|e| {
+                    eprintln!("Failed to apply fix: {}", e);
+                });
+                println!("\x1b[32mDone\x1b[0m\n");
             }
             Err(e) => {
                 eprintln!("Failed to run command: {}", e);
             }
         }
+    }
+
+    // Wait for any work left in the tasks, which should be none at this point
+    // anyway.
+    for handle in handles {
+        handle.await.expect("Failed to join task");
     }
 
     Ok(())
