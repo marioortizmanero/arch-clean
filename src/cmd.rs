@@ -213,12 +213,16 @@ impl CleanupCommand for DevUpdates {
             .output()
             .await?;
         let stdout = String::from_utf8(cmd.stdout)?;
-        let content = stdout
+        let mut content = stdout
             .lines()
             .filter(|line| line.to_string().contains("devel/"))
             .collect::<Vec<_>>()
             .join("\n");
         let fix_available = stdout.lines().count() > 0;
+        // Default message instead of empty string
+        if content.len() == 0 {
+            content.push_str("(none)");
+        }
 
         Ok(Output {
             title: "Developer updates".to_string(),
