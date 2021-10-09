@@ -311,15 +311,15 @@ impl CleanupCommand for DiskUsage {
             .stdin(du_stdin)
             .output()
             .await?;
-        let out = String::from_utf8(cmd.stdout)?
-            .lines()
-            .take(config.max_disk_usage)
-            .collect::<Vec<_>>()
-            .join("\n");
+        let out = String::from_utf8(cmd.stdout)?;
+        let out = out.lines().take(config.max_disk_usage).collect::<Vec<_>>();
 
         Ok(Output {
-            title: "Disk usage distribution in home directory".to_string(),
-            content: out,
+            title: format!(
+                "Disk usage of top {} largest nodes in home directory",
+                out.len()
+            ),
+            content: out.join("\n"),
             fix_available: false,
         })
     }
