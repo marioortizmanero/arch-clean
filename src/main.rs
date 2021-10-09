@@ -67,6 +67,7 @@ async fn main() -> Result<()> {
     // Synchonizing the results from the tasks
     while let Some((cmd, out)) = rd.recv().await {
         match out {
+            Err(e) => eprintln!("Failed to run command: {}", e),
             Ok(out) => {
                 // Printing the status
                 let fix = if out.fix_available {
@@ -102,16 +103,13 @@ async fn main() -> Result<()> {
                 });
                 println!("\x1b[32mDone\x1b[0m\n");
             }
-            Err(e) => {
-                eprintln!("Failed to run command: {}", e);
-            }
         }
     }
 
     // Wait for any work left in the tasks, which should be none at this point
     // anyway.
     for handle in handles {
-        handle.await.expect("Failed to join task");
+        handle.await?;
     }
 
     Ok(())
