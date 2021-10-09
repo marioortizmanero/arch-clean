@@ -354,11 +354,11 @@ impl CleanupCommand for RustTarget {
                 .arg("-name")
                 .arg("target")
                 .arg("-type")
-                .arg("d") // In those directories with a `Cargo.toml` file
+                .arg("d")
                 .arg("-exec")
                 .arg("du")
                 .arg("-s")
-                .arg("{}") // Get the size of the target directory
+                .arg("{}")
                 .arg(";")
                 .stdout(Stdio::piped())
                 .stderr(Stdio::null())
