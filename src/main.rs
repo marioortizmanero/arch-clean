@@ -33,6 +33,18 @@ impl std::fmt::Debug for Box<dyn CleanupCommand> {
     }
 }
 
+/// The fix is a two-step process, first we make sure that the user wants to
+/// continue. This is a blocking operation.
+fn prompt_user(conf: &Config, cmd: &dyn CleanupCommand) -> Result<bool> {
+    cmd.show_fix(conf);
+    print!("\x1b[33mConfirm? [y/N]:\x1b[0m ");
+    let mut confirm = String::new();
+    io::stdout().flush()?;
+    io::stdin().read_line(&mut confirm)?;
+
+    Ok(confirm.trim() == "y")
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     // The commands are accompanied by their titles and a suggested fix between
@@ -53,7 +65,7 @@ async fn main() -> Result<()> {
 
     // The check commands are each run in a separate task
     let (wr, mut rd) = mpsc::unbounded_channel();
-    let mut handles = Vec::new();
+    let mut handles = Vec::with_capacity(cmds.len());
     for mut cmd in cmds {
         let wr = wr.clone();
         let conf = Arc::clone(&conf);
@@ -69,35 +81,20 @@ async fn main() -> Result<()> {
         match out {
             Err(e) => eprintln!("Failed to run command: {}", e),
             Ok(out) => {
-                // Printing the status
-                let fix = if out.fix_available {
-                    " (fix available)"
-                } else {
-                    ""
-                };
-                println!("\x1b[36;1m{}{}:\x1b[0m", out.title, fix);
-                println!("{}\n", out.content.trim());
+                println!("{}", out);
 
-                // The fix will only be applied if it's configured and if the
-                // command actually has a fix available
+                // The fixes are applied sequentially so that the user sees the
+                // results of the command. They will only be applied when
+                // configured and if the command actually has a fix available
                 if !conf.apply || !out.fix_available {
                     continue;
                 }
 
-                // The fix is a two-step process, first we make sure that
-                // the user wants to continue
-                cmd.show_fix(&conf);
-                print!("\x1b[33mConfirm? [y/N]:\x1b[0m ");
-                let mut confirm = String::new();
-                io::stdout().flush()?;
-                io::stdin().read_line(&mut confirm)?;
-                if confirm.trim() != "y" {
+                if !prompt_user(&conf, &*cmd)? {
                     println!("\x1b[31mSkipped\x1b[0m\n");
                     continue;
                 }
 
-                // They are applied sequentially so that the user sees the
-                // results of the command.
                 cmd.apply_fix(&conf).await.unwrap_or_else(|e| {
                     eprintln!("Failed to apply fix: {}", e);
                 });

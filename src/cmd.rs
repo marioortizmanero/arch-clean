@@ -1,6 +1,6 @@
 use crate::Config;
 
-use std::{collections::HashSet, convert::TryInto, env, path::PathBuf, process::Stdio};
+use std::{collections::HashSet, convert::TryInto, env, fmt, path::PathBuf, process::Stdio};
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -21,6 +21,18 @@ pub struct Output {
     pub title: String,
     pub content: String,
     pub fix_available: bool,
+}
+
+impl fmt::Display for Output {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let fix = if self.fix_available {
+            " (fix available)"
+        } else {
+            ""
+        };
+        writeln!(f, "\x1b[36;1m{}{}:\x1b[0m", self.title, fix)?;
+        writeln!(f, "{}", self.content.trim())
+    }
 }
 
 #[async_trait]
@@ -106,14 +118,14 @@ impl CleanupCommand for OrphanPackages {
         let mut content = String::from_utf8(cmd.stdout)?;
         self.pkgs = content.lines().map(ToString::to_string).collect();
         // Default message instead of empty string
-        if content.len() == 0 {
+        if content.is_empty() {
             content.push_str("(none)");
         }
 
         Ok(Output {
             title: "Orphan packages".to_string(),
             content,
-            fix_available: self.pkgs.len() > 0,
+            fix_available: !self.pkgs.is_empty(),
         })
     }
 
@@ -177,15 +189,12 @@ impl CleanupCommand for TrashSize {
         let content = String::from_utf8(cmd.stdout)?;
         // The trash can be emptied only when the size shown by du is other than
         // zero.
-        let fix_available = match content.split_whitespace().next() {
-            Some("0") => false,
-            _ => true,
-        };
+        let empty_trash = matches!(content.split_whitespace().next(), Some("0"));
 
         Ok(Output {
             title: "Trash size".to_string(),
             content,
-            fix_available,
+            fix_available: !empty_trash,
         })
     }
 
@@ -220,7 +229,7 @@ impl CleanupCommand for DevUpdates {
             .join("\n");
         let fix_available = content.lines().count() > 0;
         // Default message instead of empty string
-        if content.len() == 0 {
+        if content.is_empty() {
             content.push_str("(none)");
         }
 
@@ -257,7 +266,7 @@ impl CleanupCommand for NeovimSwapFiles {
         };
 
         Ok(Output {
-            title: format!("NeoVim swap files"),
+            title: "NeoVim swap files".to_owned(),
             content: format!("{} files", count),
             fix_available: count > 0,
         })
@@ -279,22 +288,19 @@ pub struct DiskUsage;
 #[async_trait]
 impl CleanupCommand for DiskUsage {
     async fn check(&mut self, config: &Config) -> Result<Output> {
-        // Will only show the sizes of the directories in the current path.
+        // Will only show the sizes of the nodes in the user's home.
         let home = PathBuf::from(env::var("HOME").unwrap());
-        let mut dirs = Vec::new();
-        let mut stream = ReadDirStream::new(fs::read_dir(&home).await?);
-        for dir in stream.next().await {
-            let dir = dir?;
-            if dir.file_type().await?.is_dir() {
-                let mut name = home.clone();
-                name.push(dir.file_name());
-                dirs.push(name);
-            }
-        }
+        let nodes = ReadDirStream::new(fs::read_dir(&home).await?)
+            .map(|node| {
+                node.map(|dir| dir.file_name())
+                    .map(|name| [home.clone(), name.into()].iter().collect())
+            })
+            .collect::<std::io::Result<Vec<PathBuf>>>()
+            .await?;
 
         let mut cmd = Command::new("du")
             .arg("-sch")
-            .args(&dirs)
+            .args(&nodes)
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .spawn()?;
@@ -378,7 +384,7 @@ impl CleanupCommand for RustTarget {
 
             // If it's not empty, insert the directories into the list and add
             // to the total size
-            if output.len() > 0 {
+            if !output.is_empty() {
                 let dir_kb: i32 = output.iter().map(|(kb, _)| kb).sum();
                 total_kb += dir_kb;
 
