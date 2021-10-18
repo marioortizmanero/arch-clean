@@ -392,6 +392,11 @@ impl CleanupCommand for RustTarget {
             }
         }
 
+        // Some users also configure a global compilation directory
+        if let Ok(global_dir) = env::var("CARGO_TARGET_DIR") {
+            self.dirs.push(global_dir.into());
+        }
+
         Ok(Output {
             title: "Size of Rust target directories".to_string(),
             content: format!("{} MB", total_kb / 1024),
