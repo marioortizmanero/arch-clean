@@ -2,7 +2,7 @@
 name = "arch-clean"
 version = "0.1.0"
 authors = ["Mario Ortiz Manero <marioortizmanero@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 argh = "0.1.4"

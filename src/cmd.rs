@@ -327,7 +327,7 @@ impl CleanupCommand for DiskUsage {
 
 #[derive(Default)]
 pub struct RustTarget {
-    dirs: Vec<PathBuf>,
+    dirs: HashSet<PathBuf>,
 }
 #[async_trait]
 impl CleanupCommand for RustTarget {
@@ -383,7 +383,8 @@ impl CleanupCommand for RustTarget {
                 .collect::<Vec<_>>();
 
             // If it's not empty, insert the directories into the list and add
-            // to the total size
+            // to the total size. Note that empty directories may not be 0kb
+            // according to `du`.
             if !output.is_empty() {
                 let dir_kb: i32 = output.iter().map(|(kb, _)| kb).sum();
                 total_kb += dir_kb;
@@ -394,7 +395,10 @@ impl CleanupCommand for RustTarget {
 
         // Some users also configure a global compilation directory
         if let Ok(global_dir) = env::var("CARGO_TARGET_DIR") {
-            self.dirs.push(global_dir.into());
+            let path = PathBuf::from(global_dir);
+            if path.exists() {
+                self.dirs.insert(path);
+            }
         }
 
         Ok(Output {
