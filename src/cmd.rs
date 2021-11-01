@@ -203,7 +203,8 @@ impl CleanupCommand for TrashSize {
     }
 
     async fn apply_fix(&self, _config: &Config) -> Result<()> {
-        Command::new("trash-empty").output().await?;
+        let mut cmd = Command::new("sudo").arg("trash-empty").spawn()?;
+        cmd.wait().await?;
 
         Ok(())
     }
@@ -417,7 +418,9 @@ impl CleanupCommand for RustTarget {
 
     async fn apply_fix(&self, _config: &Config) -> Result<()> {
         for dir in &self.dirs {
-            fs::remove_dir_all(dir).await?
+            if let Err(e) = fs::remove_dir_all(dir).await {
+                eprintln!("Failed to remove {:?}: {}", dir, e);
+            }
         }
 
         Ok(())
