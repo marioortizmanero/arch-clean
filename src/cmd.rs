@@ -405,7 +405,7 @@ impl CleanupCommand for RustTarget {
         Ok(Output {
             title: "Size of Rust target directories".to_string(),
             content: format!("{} MB", total_kb / 1024),
-            fix_available: true,
+            fix_available: !self.dirs.is_empty(),
         })
     }
 
