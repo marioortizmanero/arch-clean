@@ -40,14 +40,11 @@ pub trait CleanupCommand: Sync + Send {
     /// Runs the command and checks the output
     async fn check(&mut self, config: &Config) -> Result<Output>;
 
-    /// Non-blocking, this will just show the user what `apply_fix` does. By
-    /// default it's nothing.
-    fn show_fix(&self, _config: &Config) {}
+    /// Non-blocking, this will just show the user what `apply_fix` does.
+    fn show_fix(&self, _config: &Config);
 
-    /// Applies the suggested fix for the command. By default it's nothing.
-    async fn apply_fix(&self, _config: &Config) -> Result<()> {
-        Ok(())
-    }
+    /// Applies the suggested fix for the command.
+    async fn apply_fix(&self, _config: &Config) -> Result<()>;
 }
 
 #[derive(Default)]
@@ -105,6 +102,14 @@ impl CleanupCommand for LastInstalled {
             fix_available: false,
         })
     }
+
+    fn show_fix(&self, _config: &Config) {
+        unimplemented!()
+    }
+
+    async fn apply_fix(&self, _config: &Config) -> Result<()> {
+        unimplemented!()
+    }
 }
 
 #[derive(Default)]
@@ -132,7 +137,7 @@ impl CleanupCommand for OrphanPackages {
     fn show_fix(&self, _config: &Config) {
         let pkgs = self.pkgs.join(" ");
         println!("This fix will run the command:");
-        println!("  yay -Rns --noconfirm {}", pkgs);
+        println!("  yay -Rns --noconfirm {pkgs}");
     }
 
     async fn apply_fix(&self, _config: &Config) -> Result<()> {
@@ -166,6 +171,17 @@ impl CleanupCommand for Paccache {
             content,
             fix_available,
         })
+    }
+
+    fn show_fix(&self, _config: &Config) {
+        println!("This fix will run the command 'paccache -r'");
+    }
+
+    async fn apply_fix(&self, _config: &Config) -> Result<()> {
+        let mut cmd = Command::new("paccache").arg("-r").spawn()?;
+        cmd.wait().await?;
+
+        Ok(())
     }
 }
 
@@ -268,7 +284,7 @@ impl CleanupCommand for NeovimSwapFiles {
 
         Ok(Output {
             title: "NeoVim swap files".to_owned(),
-            content: format!("{} files", count),
+            content: format!("{count} files"),
             fix_available: count > 0,
         })
     }
@@ -324,6 +340,14 @@ impl CleanupCommand for DiskUsage {
             fix_available: false,
         })
     }
+
+    fn show_fix(&self, _config: &Config) {
+        unimplemented!()
+    }
+
+    async fn apply_fix(&self, _config: &Config) -> Result<()> {
+        unimplemented!()
+    }
 }
 
 #[derive(Default)]
@@ -378,7 +402,7 @@ impl CleanupCommand for RustTarget {
                 .lines()
                 .map(|line| match line.split_once('\t') {
                     Some((kb, path)) => (kb.parse().unwrap_or(0), PathBuf::from(path)),
-                    None => panic!("unexpected output from `du`: {}", line),
+                    None => panic!("unexpected output from `du`: {line}"),
                 })
                 .filter(|(ref kb, _)| kb > &0)
                 .collect::<Vec<_>>();
@@ -419,7 +443,7 @@ impl CleanupCommand for RustTarget {
     async fn apply_fix(&self, _config: &Config) -> Result<()> {
         for dir in &self.dirs {
             if let Err(e) = fs::remove_dir_all(dir).await {
-                eprintln!("Failed to remove {:?}: {}", dir, e);
+                eprintln!("Failed to remove {dir:?}: {e}");
             }
         }
 

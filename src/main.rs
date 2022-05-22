@@ -79,9 +79,9 @@ async fn main() -> Result<()> {
     // Synchonizing the results from the tasks
     while let Some((cmd, out)) = rd.recv().await {
         match out {
-            Err(e) => eprintln!("Failed to run command: {}", e),
+            Err(e) => eprintln!("Failed to run command: {e}"),
             Ok(out) => {
-                println!("{}", out);
+                println!("{out}");
 
                 // The fixes are applied sequentially so that the user sees the
                 // results of the command. They will only be applied when
@@ -96,7 +96,7 @@ async fn main() -> Result<()> {
                 }
 
                 cmd.apply_fix(&conf).await.unwrap_or_else(|e| {
-                    eprintln!("Failed to apply fix: {}", e);
+                    eprintln!("Failed to apply fix: {e}");
                 });
                 println!("\x1b[32mDone\x1b[0m\n");
             }
