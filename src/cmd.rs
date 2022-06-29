@@ -37,14 +37,14 @@ impl fmt::Display for Output {
 
 #[async_trait]
 pub trait CleanupCommand: Sync + Send {
-    /// Runs the command and checks the output
+    /// Runs the command and checks the output.
     async fn check(&mut self, config: &Config) -> Result<Output>;
 
     /// Non-blocking, this will just show the user what `apply_fix` does.
-    fn show_fix(&self, _config: &Config);
+    fn show_fix(&self, config: &Config);
 
     /// Applies the suggested fix for the command.
-    async fn apply_fix(&self, _config: &Config) -> Result<()>;
+    async fn apply_fix(&self, config: &Config) -> Result<()>;
 }
 
 #[derive(Default)]
